@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import cv2
+import numpy as np
 import tensorflow as tf
 
 # ROS imports
@@ -32,7 +33,27 @@ class Detector:
             print(e)
 
         cv2.imshow("Image", cv_image)
+        self.run_inference(cv_image)
         cv2.waitKey(1)
+
+    def run_inference(self, cv_image):
+        image = np.asarray(cv_image)
+        # Convert image to tensor using tf.convert_to_tensor
+        input_tensor = tf.convert_to_tensor(image)
+        # Add one axis, because model expects batch of images
+        input_tensor = input_tensor[tf.newaxis, ...]
+
+        # Run inference
+        output_dict = self.model(input_tensor)
+
+        # All outputs are batches tensors. It needs to be converted to numpy array and batch dimension needs to be
+        # removed
+        num_detections = int(output_dict.pop("num_detections"))
+        output_dict = {key: value[0, :num_detections].numpy() for key, value in output_dict.items()}
+        output_dict["num_detections"] = num_detections
+
+        # Convert detection classes to ints
+        output_dict["detection_classes"] = output_dict["detection_classes"].astype(np.int64)
 
     def load_model(self):
         model_dir = os.path.join(Path(self.model_dir), "saved_model")
