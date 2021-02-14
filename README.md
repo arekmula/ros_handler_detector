@@ -1,15 +1,30 @@
 # ros_handler_detector
 
-## Dependencies
-ROS Melodic
-Tensorflow
+## Installation
+First ROS Noetic and tensorflow should be installed
+Then:
 ```
-
+mkdir -p caktin_ws/src
+cd catkin_ws
+catkin_make
+cd src
+git clone https://github.com/arekmula/ros_handler_detector
+cd ros_handler_detector/src
+protoc object_detection/protos/*.proto --python_out=.
+cd ~/catkin_ws
+rosdep install --from-path src/ -y -i
+catkin_make
 ```
 
 ## Run with
 
-- Setup path to your model directory:
+- Setup path to your model directory and label map:
 ```
 rosparam set model_dir "path/to/model"
+rosparam set label_map_path "path/to/labelmap"
+```
+
+- Run with
+```
+rosrun handler_detector handler_detector.py
 ```

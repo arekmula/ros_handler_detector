@@ -14,14 +14,20 @@ from std_msgs.msg import String, Header
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 
+# Object detection imports
+import object_detection
+from object_detection.utils import visualization_utils as vis_util
+from object_detection.utils import label_map_util
+
 
 class Detector:
 
-    def __init__(self, model_dir):
+    def __init__(self, model_dir, label_map_path):
         self.image_sub = rospy.Subscriber("hz_image_raw", data_class=Image, callback=self.image_callback, queue_size=1,
                                           buff_size=2**24)
         self.bridge = CvBridge()
         self.model_dir = model_dir
+        self.category_index = label_map_util.create_category_index_from_labelmap(label_map_path, use_display_name=True)
         cv2.namedWindow("Image")
         self.model = None
         self.load_model()
@@ -32,9 +38,7 @@ class Detector:
         except CvBridgeError as e:
             print(e)
 
-        cv2.imshow("Image", cv_image)
         self.run_inference(cv_image)
-        cv2.waitKey(1)
 
     def run_inference(self, cv_image):
         image = np.asarray(cv_image)
@@ -55,6 +59,20 @@ class Detector:
         # Convert detection classes to ints
         output_dict["detection_classes"] = output_dict["detection_classes"].astype(np.int64)
 
+        # Visualize detections on image
+        vis_util.visualize_boxes_and_labels_on_image_array(
+            image,
+            output_dict['detection_boxes'],
+            output_dict['detection_classes'],
+            output_dict['detection_scores'],
+            self.category_index,
+            instance_masks=output_dict.get('detection_masks_reframed', None),
+            use_normalized_coordinates=True,
+            line_thickness=8)
+
+        cv2.imshow("Image", image)
+        cv2.waitKey(1)
+
     def load_model(self):
         model_dir = os.path.join(Path(self.model_dir), "saved_model")
         self.model = tf.compat.v2.saved_model.load((str(model_dir)), None)
@@ -66,8 +84,11 @@ def main(args):
     if rospy.has_param("model_dir"):
         model_dir = rospy.get_param("model_dir")
         print(model_dir)
+    if rospy.has_param("label_map_path"):
+        label_map_path = rospy.get_param("label_map_path")
+        print(label_map_path)
 
-    detector = Detector(model_dir)
+    detector = Detector(model_dir, label_map_path)
 
     try:
         rospy.spin()
