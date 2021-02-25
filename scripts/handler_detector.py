@@ -18,17 +18,17 @@ from cv_bridge import CvBridge, CvBridgeError
 import object_detection
 from object_detection.utils import visualization_utils as vis_util
 from object_detection.utils import label_map_util
+from object_detection.utils import ops as utils_ops
 
 
 class Detector:
 
-    def __init__(self, model_dir, label_map_path):
-        self.image_sub = rospy.Subscriber("hz_image_raw", data_class=Image, callback=self.image_callback, queue_size=1,
+    def __init__(self, model_dir, label_map_path, rgb_image_topic):
+        self.image_sub = rospy.Subscriber(rgb_image_topic, data_class=Image, callback=self.image_callback, queue_size=1,
                                           buff_size=2**24)
         self.bridge = CvBridge()
         self.model_dir = model_dir
         self.category_index = label_map_util.create_category_index_from_labelmap(label_map_path, use_display_name=True)
-        cv2.namedWindow("Image")
         self.model = None
         self.load_model()
 
@@ -38,7 +38,8 @@ class Detector:
         except CvBridgeError as e:
             print(e)
 
-        self.run_inference(cv_image)
+        if self.model is not None:
+            self.run_inference(cv_image)
 
     def run_inference(self, cv_image):
         image = np.asarray(cv_image)
@@ -58,6 +59,16 @@ class Detector:
 
         # Convert detection classes to ints
         output_dict["detection_classes"] = output_dict["detection_classes"].astype(np.int64)
+
+        # Handle models with masks:
+        if 'detection_masks' in output_dict:
+            # Reframe the the bbox mask to the image size.
+            detection_masks_reframed = utils_ops.reframe_box_masks_to_image_masks(
+                output_dict['detection_masks'], output_dict['detection_boxes'],
+                image.shape[0], image.shape[1])
+            detection_masks_reframed = tf.cast(detection_masks_reframed > 0.5,
+                                               tf.uint8)
+            output_dict['detection_masks_reframed'] = detection_masks_reframed.numpy()
 
         # Visualize detections on image
         vis_util.visualize_boxes_and_labels_on_image_array(
@@ -87,8 +98,11 @@ def main(args):
     if rospy.has_param("label_map_path"):
         label_map_path = rospy.get_param("label_map_path")
         print(label_map_path)
+    if rospy.has_param("rgb_image_topic"):
+        rgb_image_topic = rospy.get_param("rgb_image_topic")
+        print(rgb_image_topic)
 
-    detector = Detector(model_dir, label_map_path)
+    detector = Detector(model_dir, label_map_path, rgb_image_topic)
 
     try:
         rospy.spin()

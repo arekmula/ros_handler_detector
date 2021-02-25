@@ -23,6 +23,10 @@ catkin_make
 rosparam set model_dir "path/to/model"
 rosparam set label_map_path "path/to/labelmap"
 ```
+- Setup RGB image (640x480) topic:
+```
+rosparam set rgb_image_topic "image/topic"
+```
 
 - Run with
 ```
