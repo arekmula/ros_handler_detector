@@ -11,7 +11,7 @@ import tensorflow as tf
 # ROS imports
 import rospy
 from std_msgs.msg import String, Header
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, RegionOfInterest
 from cv_bridge import CvBridge, CvBridgeError
 
 # Object detection imports
@@ -81,6 +81,7 @@ class Detector:
             vis_image = image.copy()
             self.visualize_prediction(vis_image, output_dict)
 
+        self.build_prediction_msg(None, prediction=output_dict)
         # Visualize detections in opencv
         # cv2.imshow("Image", image)
         # cv2.waitKey(1)
@@ -102,6 +103,19 @@ class Detector:
             line_thickness=8)
         visualization_msg = self.cv_bridge.cv2_to_imgmsg(image, "bgr8")
         self.vis_pub.publish(visualization_msg)
+
+
+    def build_prediction_msg(self, msg, prediction):
+        for i, (ymin, xmin, ymax, xmax) in enumerate(prediction["detection_boxes"]):
+
+            # Create bounding box field for current prediction ROI
+            box = RegionOfInterest()
+            box.x_offset = np.asscalar(xmin)
+            box.y_offset = np.asscalar(ymin)
+            box.height = np.asscalar(ymax - ymin)
+            box.width = np.asscalar(xmax-xmin)
+            # TODO: Check what unit appeared in front_detection
+
 
 
 def main(args):
