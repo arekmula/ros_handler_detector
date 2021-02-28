@@ -26,7 +26,13 @@ class Detector:
     def __init__(self, model_dir, label_map_path, rgb_image_topic):
         self.image_sub = rospy.Subscriber(rgb_image_topic, data_class=Image, callback=self.image_callback, queue_size=1,
                                           buff_size=2**24)
-        self.bridge = CvBridge()
+
+        # Should publish visualization image
+        self.should_publish_visualization = rospy.get_param("visualize_handler_prediction", True)
+        if self.should_publish_visualization:
+            self.vis_pub = rospy.Publisher("handler_visualization", Image, queue_size=1)
+
+        self.cv_bridge = CvBridge()
         self.model_dir = model_dir
         self.category_index = label_map_util.create_category_index_from_labelmap(label_map_path, use_display_name=True)
         self.model = None
@@ -34,7 +40,7 @@ class Detector:
 
     def image_callback(self, data):
         try:
-            cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+            cv_image = self.cv_bridge.imgmsg_to_cv2(data, "bgr8")
         except CvBridgeError as e:
             print(e)
 
@@ -71,6 +77,20 @@ class Detector:
             output_dict['detection_masks_reframed'] = detection_masks_reframed.numpy()
 
         # Visualize detections on image
+        if self.should_publish_visualization:
+            vis_image = image.copy()
+            self.visualize_prediction(vis_image, output_dict)
+
+        # Visualize detections in opencv
+        # cv2.imshow("Image", image)
+        # cv2.waitKey(1)
+
+    def load_model(self):
+        model_dir = os.path.join(Path(self.model_dir), "saved_model")
+        self.model = tf.compat.v2.saved_model.load((str(model_dir)), None)
+        self.model = self.model.signatures["serving_default"]
+
+    def visualize_prediction(self, image, output_dict):
         vis_util.visualize_boxes_and_labels_on_image_array(
             image,
             output_dict['detection_boxes'],
@@ -80,14 +100,8 @@ class Detector:
             instance_masks=output_dict.get('detection_masks_reframed', None),
             use_normalized_coordinates=True,
             line_thickness=8)
-
-        cv2.imshow("Image", image)
-        cv2.waitKey(1)
-
-    def load_model(self):
-        model_dir = os.path.join(Path(self.model_dir), "saved_model")
-        self.model = tf.compat.v2.saved_model.load((str(model_dir)), None)
-        self.model = self.model.signatures["serving_default"]
+        visualization_msg = self.cv_bridge.cv2_to_imgmsg(image, "bgr8")
+        self.vis_pub.publish(visualization_msg)
 
 
 def main(args):

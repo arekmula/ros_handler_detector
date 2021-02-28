@@ -16,7 +16,7 @@ rosdep install --from-path src/ -y -i
 catkin_make
 ```
 
-## Run with
+## Run 
 
 - Setup path to your model directory and label map:
 ```
@@ -26,6 +26,10 @@ rosparam set label_map_path "path/to/labelmap"
 - Setup RGB image (640x480) topic:
 ```
 rosparam set rgb_image_topic "image/topic"
+```
+- Determine if visualization image should be published
+```
+rosparam set visualize_handler_prediction True/False
 ```
 
 - Run with
