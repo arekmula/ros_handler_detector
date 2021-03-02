@@ -20,17 +20,23 @@ from object_detection.utils import visualization_utils as vis_util
 from object_detection.utils import label_map_util
 from object_detection.utils import ops as utils_ops
 
+# ROS current package import
+from handler_detection.msg import HandlerPrediction
+
 
 class Detector:
 
     def __init__(self, model_dir, label_map_path, rgb_image_topic):
         self.image_sub = rospy.Subscriber(rgb_image_topic, data_class=Image, callback=self.image_callback, queue_size=1,
-                                          buff_size=2**24)
+                                          buff_size=2 ** 24)
 
         # Should publish visualization image
         self.should_publish_visualization = rospy.get_param("visualize_handler_prediction", True)
         if self.should_publish_visualization:
             self.vis_pub = rospy.Publisher("handler_visualization", Image, queue_size=1)
+
+        # Prediction threshold
+        self.prediction_threshold = rospy.get_param("handler_prediction_threshold", 0.5)
 
         self.cv_bridge = CvBridge()
         self.model_dir = model_dir
@@ -81,7 +87,7 @@ class Detector:
             vis_image = image.copy()
             self.visualize_prediction(vis_image, output_dict)
 
-        self.build_prediction_msg(None, prediction=output_dict)
+        self.build_prediction_msg(None, prediction=output_dict, image_shape=image.shape)
         # Visualize detections in opencv
         # cv2.imshow("Image", image)
         # cv2.waitKey(1)
@@ -104,18 +110,60 @@ class Detector:
         visualization_msg = self.cv_bridge.cv2_to_imgmsg(image, "bgr8")
         self.vis_pub.publish(visualization_msg)
 
-
-    def build_prediction_msg(self, msg, prediction):
+    def build_prediction_msg(self, msg, prediction, image_shape):
+        img_height, img_width, _ = image_shape
+        prediction_msg = HandlerPrediction()
         for i, (ymin, xmin, ymax, xmax) in enumerate(prediction["detection_boxes"]):
+            # Skip detections with low score
+            if prediction["detection_scores"][i] < self.prediction_threshold:
+                continue
 
             # Create bounding box field for current prediction ROI
             box = RegionOfInterest()
-            box.x_offset = np.asscalar(xmin)
-            box.y_offset = np.asscalar(ymin)
-            box.height = np.asscalar(ymax - ymin)
-            box.width = np.asscalar(xmax-xmin)
-            # TODO: Check what unit appeared in front_detection
+            box.x_offset = np.int(np.floor(np.asscalar(xmin) * img_width))
+            box.y_offset = np.int(np.floor(np.asscalar(ymin) * img_height))
+            box.height = np.int(np.floor(np.asscalar(ymax - ymin) * img_height))
+            box.width = np.int(np.floor(np.asscalar(xmax - xmin) * img_width))
+            prediction_msg.boxes.append(box)
 
+            # Add class_id
+            class_id = prediction["detection_classes"][i]
+            prediction_msg.class_ids.append(class_id)
+
+            # Add class_name
+            class_name = self.category_index[class_id]
+            prediction_msg.class_names.append(class_name)
+
+            # Add prediction score
+            score = prediction["detection_scores"][i]
+            prediction_msg.scores.append(score)
+
+            # Create prediction mask for current ROI
+            mask = self.create_prediction_mask(img_height, img_width, box)
+            mask.header = msg.header
+            prediction_msg.masks.append(mask)
+
+    def create_prediction_mask(self, img_height, img_width, roi: RegionOfInterest):
+        """
+        Creates image mask for current RoI
+
+        :param img_height: image height
+        :param img_width: image width
+        :param roi: Current region of interest
+        :return: image mask as ROS Image type
+        """
+        mask_cv2 = np.zeros((img_height, img_width, 1), np.uint8)
+        mask_cv2 = cv2.rectangle(mask_cv2,
+                                 (roi.x_offset, roi.y_offset),
+                                 (roi.x_offset + roi.width, roi.y_offset + roi.height),
+                                 255,
+                                 -1)
+        mask = self.cv_bridge.cv2_to_imgmsg(mask_cv2, "mono8")
+        mask.encoding = "mono8"
+        mask.is_bigendian = False
+        mask.step = mask.width
+
+        return mask
 
 
 def main(args):
