@@ -51,6 +51,10 @@ class Detector:
         self.last_msg = None
         self.msg_lock = threading.Lock()
 
+        # Handler detection publisher
+        self.handler_detection_topic = "handler_prediction_topic"
+        self.handler_detection_pub = rospy.Publisher(self.handler_detection_topic, HandlerPrediction, queue_size=1)
+
     def image_callback(self, data):
         rospy.logdebug("Get input image")
 
@@ -112,7 +116,9 @@ class Detector:
                     vis_image = image.copy()
                     self.visualize_prediction(vis_image, output_dict)
 
-                self.build_prediction_msg(msg, prediction=output_dict, image_shape=image.shape)
+                # Build and publish prediction message
+                prediction_msg = self.build_prediction_msg(msg, prediction=output_dict, image_shape=image.shape)
+                self.handler_detection_pub.publish(prediction_msg)
 
     def load_model(self):
         model_dir = os.path.join(Path(self.model_dir), "saved_model")
@@ -164,6 +170,8 @@ class Detector:
             mask = self.create_prediction_mask(img_height, img_width, box)
             mask.header = msg.header
             prediction_msg.masks.append(mask)
+
+        return prediction_msg
 
     def create_prediction_mask(self, img_height, img_width, roi: RegionOfInterest):
         """
