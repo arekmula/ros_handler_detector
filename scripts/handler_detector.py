@@ -52,7 +52,7 @@ class Detector:
         self.msg_lock = threading.Lock()
 
         # Handler detection publisher
-        self.handler_detection_topic = "handler_prediction_topic"
+        self.handler_detection_topic = "handler_prediction"
         self.handler_detection_pub = rospy.Publisher(self.handler_detection_topic, HandlerPrediction, queue_size=1)
 
     def image_callback(self, data):
@@ -159,7 +159,7 @@ class Detector:
             prediction_msg.class_ids.append(class_id)
 
             # Add class_name
-            class_name = self.category_index[class_id]
+            class_name = self.category_index[class_id]["name"]
             prediction_msg.class_names.append(class_name)
 
             # Add prediction score
