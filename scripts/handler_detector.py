@@ -34,7 +34,10 @@ class Detector:
         if self.should_publish_visualization:
             self.vis_pub = rospy.Publisher("handler_visualization", Image, queue_size=1)
 
+        # Input image subscriber
         self.rgb_image_topic = rgb_image_topic
+        self.image_sub = rospy.Subscriber(self.rgb_image_topic, data_class=Image, callback=self.image_callback,
+                                          queue_size=1, buff_size=2 ** 24)
 
         # Prediction threshold
         self.prediction_threshold = rospy.get_param("handler_prediction_threshold", 0.5)
@@ -47,78 +50,66 @@ class Detector:
         self.model = None
         self.load_model()
 
-        # Last input message and message lock
+        # Last input message
         self.last_msg = None
-        self.msg_lock = threading.Lock()
 
         # Handler detection publisher
         self.handler_detection_topic = "handler_prediction"
         self.handler_detection_pub = rospy.Publisher(self.handler_detection_topic, HandlerPrediction, queue_size=1)
 
     def image_callback(self, data):
-        rospy.logdebug("Get input image")
-
-        if self.msg_lock.acquire(False):
-            self.last_msg = data
-            self.msg_lock.release()
+        print("Received image!")
+        self.last_msg = data
+        self.run_inference()
 
     def run_inference(self):
-        image_sub = rospy.Subscriber(self.rgb_image_topic, data_class=Image, callback=self.image_callback,
-                                     queue_size=1, buff_size=2 ** 24)
+        msg = self.last_msg
+        self.last_msg = None
 
-        rate = rospy.Rate(100)
-        while not rospy.is_shutdown():
-            # Wait for new image to be acquired
-            if self.msg_lock.acquire(False):
-                msg = self.last_msg
-                self.last_msg = None
-                self.msg_lock.release()
-            else:
-                rate.sleep()
-                continue
+        if msg is not None:
+            try:
+                cv_image = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+            except CvBridgeError as e:
+                print(e)
 
-            if msg is not None:
-                try:
-                    cv_image = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
-                except CvBridgeError as e:
-                    print(e)
+            image = np.asarray(cv_image)
+            # Convert image to tensor using tf.convert_to_tensor
+            input_tensor = tf.convert_to_tensor(image)
+            # Add one axis, because model expects batch of images
+            input_tensor = input_tensor[tf.newaxis, ...]
 
-                image = np.asarray(cv_image)
-                # Convert image to tensor using tf.convert_to_tensor
-                input_tensor = tf.convert_to_tensor(image)
-                # Add one axis, because model expects batch of images
-                input_tensor = input_tensor[tf.newaxis, ...]
+            # Run inference
+            print("Running inference on input image!")
+            output_dict = self.model(input_tensor)
 
-                # Run inference
-                output_dict = self.model(input_tensor)
+            # All outputs are batches tensors. It needs to be converted to numpy array and batch dimension needs
+            # to be removed
+            num_detections = int(output_dict.pop("num_detections"))
+            output_dict = {key: value[0, :num_detections].numpy() for key, value in output_dict.items()}
+            output_dict["num_detections"] = num_detections
 
-                # All outputs are batches tensors. It needs to be converted to numpy array and batch dimension needs
-                # to be removed
-                num_detections = int(output_dict.pop("num_detections"))
-                output_dict = {key: value[0, :num_detections].numpy() for key, value in output_dict.items()}
-                output_dict["num_detections"] = num_detections
+            # Convert detection classes to ints
+            output_dict["detection_classes"] = output_dict["detection_classes"].astype(np.int64)
 
-                # Convert detection classes to ints
-                output_dict["detection_classes"] = output_dict["detection_classes"].astype(np.int64)
+            # Handle models with masks:
+            if 'detection_masks' in output_dict:
+                # Reframe the the bbox mask to the image size.
+                detection_masks_reframed = utils_ops.reframe_box_masks_to_image_masks(
+                    output_dict['detection_masks'], output_dict['detection_boxes'],
+                    image.shape[0], image.shape[1])
+                detection_masks_reframed = tf.cast(detection_masks_reframed > 0.5,
+                                                   tf.uint8)
+                output_dict['detection_masks_reframed'] = detection_masks_reframed.numpy()
 
-                # Handle models with masks:
-                if 'detection_masks' in output_dict:
-                    # Reframe the the bbox mask to the image size.
-                    detection_masks_reframed = utils_ops.reframe_box_masks_to_image_masks(
-                        output_dict['detection_masks'], output_dict['detection_boxes'],
-                        image.shape[0], image.shape[1])
-                    detection_masks_reframed = tf.cast(detection_masks_reframed > 0.5,
-                                                       tf.uint8)
-                    output_dict['detection_masks_reframed'] = detection_masks_reframed.numpy()
+            # Visualize detections on image
+            if self.should_publish_visualization:
+                vis_image = image.copy()
+                self.visualize_prediction(vis_image, output_dict)
 
-                # Visualize detections on image
-                if self.should_publish_visualization:
-                    vis_image = image.copy()
-                    self.visualize_prediction(vis_image, output_dict)
-
-                # Build and publish prediction message
-                prediction_msg = self.build_prediction_msg(msg, prediction=output_dict, image_shape=image.shape)
-                self.handler_detection_pub.publish(prediction_msg)
+            # Build and publish prediction message
+            prediction_msg = self.build_prediction_msg(msg, prediction=output_dict, image_shape=image.shape)
+            print("Publishing inference results")
+            self.handler_detection_pub.publish(prediction_msg)
 
     def load_model(self):
         model_dir = os.path.join(Path(self.model_dir), "saved_model")
@@ -209,13 +200,8 @@ def main(args):
         print(rgb_image_topic)
 
     detector = Detector(model_dir, label_map_path, rgb_image_topic)
-    detector.run_inference()
 
-    try:
-        rospy.spin()
-    except KeyboardInterrupt:
-        print("Shutdown")
-    cv2.destroyAllWindows()
+    rospy.spin()
 
 
 if __name__ == '__main__':
