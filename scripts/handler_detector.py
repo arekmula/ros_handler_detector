@@ -40,7 +40,7 @@ class Detector:
                                           queue_size=1, buff_size=2 ** 24)
 
         # Prediction threshold
-        self.prediction_threshold = rospy.get_param("handler_prediction_threshold", 0.5)
+        self.prediction_threshold = rospy.get_param("handler_prediction_threshold", 0.25)
 
         self.cv_bridge = CvBridge()
 
@@ -68,6 +68,7 @@ class Detector:
 
         if msg is not None:
             try:
+                # TODO: Check if it shouldn't be rgb8
                 cv_image = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
             except CvBridgeError as e:
                 print(e)
@@ -113,8 +114,7 @@ class Detector:
 
     def load_model(self):
         model_dir = os.path.join(Path(self.model_dir), "saved_model")
-        self.model = tf.compat.v2.saved_model.load((str(model_dir)), None)
-        self.model = self.model.signatures["serving_default"]
+        self.model = tf.saved_model.load(model_dir)
 
     def visualize_prediction(self, image, output_dict):
         vis_util.visualize_boxes_and_labels_on_image_array(
@@ -125,6 +125,7 @@ class Detector:
             self.category_index,
             instance_masks=output_dict.get('detection_masks_reframed', None),
             use_normalized_coordinates=True,
+            min_score_thresh=self.prediction_threshold,
             line_thickness=8)
         visualization_msg = self.cv_bridge.cv2_to_imgmsg(image, "bgr8")
         self.vis_pub.publish(visualization_msg)
