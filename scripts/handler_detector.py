@@ -40,7 +40,7 @@ class Detector:
                                           queue_size=1, buff_size=2 ** 24)
 
         # Prediction threshold
-        self.prediction_threshold = rospy.get_param("handler_prediction_threshold", 0.25)
+        self.prediction_threshold = rospy.get_param("handler_prediction_threshold", 0.5)
 
         self.cv_bridge = CvBridge()
 
@@ -73,6 +73,7 @@ class Detector:
             except CvBridgeError as e:
                 print(e)
 
+            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             image = np.asarray(cv_image)
             # Convert image to tensor using tf.convert_to_tensor
             input_tensor = tf.convert_to_tensor(image)
@@ -105,7 +106,7 @@ class Detector:
             # Visualize detections on image
             if self.should_publish_visualization:
                 vis_image = image.copy()
-                self.visualize_prediction(vis_image, output_dict)
+                self.visualize_prediction(cv2.cvtColor(vis_image, cv2.COLOR_BGR2RGB), output_dict)
 
             # Build and publish prediction message
             prediction_msg = self.build_prediction_msg(msg, prediction=output_dict, image_shape=image.shape)
