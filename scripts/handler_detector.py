@@ -68,7 +68,6 @@ class Detector:
 
         if msg is not None:
             try:
-                # TODO: Check if it shouldn't be rgb8
                 cv_image = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
             except CvBridgeError as e:
                 print(e)
