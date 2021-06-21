@@ -72,6 +72,7 @@ class Detector:
             except CvBridgeError as e:
                 print(e)
 
+            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             image = np.asarray(cv_image)
             # Convert image to tensor using tf.convert_to_tensor
             input_tensor = tf.convert_to_tensor(image)
@@ -104,7 +105,7 @@ class Detector:
             # Visualize detections on image
             if self.should_publish_visualization:
                 vis_image = image.copy()
-                self.visualize_prediction(vis_image, output_dict)
+                self.visualize_prediction(cv2.cvtColor(vis_image, cv2.COLOR_BGR2RGB), output_dict)
 
             # Build and publish prediction message
             prediction_msg = self.build_prediction_msg(msg, prediction=output_dict, image_shape=image.shape)
@@ -113,8 +114,7 @@ class Detector:
 
     def load_model(self):
         model_dir = os.path.join(Path(self.model_dir), "saved_model")
-        self.model = tf.compat.v2.saved_model.load((str(model_dir)), None)
-        self.model = self.model.signatures["serving_default"]
+        self.model = tf.saved_model.load(model_dir)
 
     def visualize_prediction(self, image, output_dict):
         vis_util.visualize_boxes_and_labels_on_image_array(
@@ -125,6 +125,7 @@ class Detector:
             self.category_index,
             instance_masks=output_dict.get('detection_masks_reframed', None),
             use_normalized_coordinates=True,
+            min_score_thresh=self.prediction_threshold,
             line_thickness=8)
         visualization_msg = self.cv_bridge.cv2_to_imgmsg(image, "bgr8")
         self.vis_pub.publish(visualization_msg)
