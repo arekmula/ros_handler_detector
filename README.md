@@ -1,8 +1,13 @@
 # ros_handler_detector
 ## About
-<img src="imgs/detections1.jpg" alt="drawing" width="160" height="120"/>
-<img src="imgs/detections2.jpg" alt="drawing" width="160" height="120"/>
-<img src="imgs/detections3.jpg" alt="drawing" width="160" height="120"/>
+
+<p align="center">
+  <img alt="1" src="imgs/detections1.jpg" width="30%">
+&nbsp; &nbsp; &nbsp; &nbsp;
+  <img alt="2" src="imgs/detections2.jpg" width="30%">
+&nbsp; &nbsp; &nbsp; &nbsp;
+  <img alt="3" src="imgs/detections3.jpg" width="30%">
+</p>
 
 The goal of the project is to build a ROS node that would be responsible for detecting handlers of articulated objects such as cabinets, wardrobes, or lockers. The module uses a neural network to perform the task and utilizes CenterNet Resnet50 V1 architecture. The dataset used for training, evaluation, and testing is available [here](https://drive.google.com/file/d/11P2eSMlXDSz065TxQTR-hYyBDkFpOWnZ/view?usp=sharing)
 
