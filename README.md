@@ -1,8 +1,8 @@
 # ros_handler_detector
 ## About
-![](imgs/detections1.jpg =160x120)
-![](imgs/detections2.jpg =160x120)
-![](imgs/detections3.jpg =160x120)
+<img src="imgs/detections1.jpg" alt="drawing" width="160" height="120"/>
+<img src="imgs/detections2.jpg" alt="drawing" width="160" height="120"/>
+<img src="imgs/detections3.jpg" alt="drawing" width="160" height="120"/>
 
 The goal of the project is to build a ROS node that would be responsible for detecting handlers of articulated objects such as cabinets, wardrobes, or lockers. The module uses a neural network to perform the task and utilizes CenterNet Resnet50 V1 architecture. The dataset used for training, evaluation, and testing is available [here](https://drive.google.com/file/d/11P2eSMlXDSz065TxQTR-hYyBDkFpOWnZ/view?usp=sharing)
 
@@ -23,8 +23,6 @@ This module is part of my master thesis "Point cloud-based model of the scene en
 - Python 3.8
 
 ## Installation
-First ROS Noetic and tensorflow should be installed
-Then:
 ```
 mkdir -p caktin_ws/src
 cd catkin_ws
@@ -53,8 +51,11 @@ rosparam set rgb_image_topic "image/topic"
 ```
 rosparam set visualize_handler_prediction True/False
 ```
-
 - Run with
 ```
 rosrun handler_detector handler_detector.py
+```
+- Change detection threshold if you want
+```
+rosparam set handler_prediction_threshold 0.7
 ```
